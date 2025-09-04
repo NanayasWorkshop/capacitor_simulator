@@ -6,247 +6,220 @@ from plotly.subplots import make_subplots
 
 # Load the data
 try:
-    df = pd.read_csv('anti_bell_ft_sensor_data.csv')
+    df = pd.read_csv('even_distribution_ft_data.csv')
     print(f"✅ Loaded {len(df)} data points successfully!")
 except FileNotFoundError:
-    print("❌ Error: realistic_ft_sensor_data.csv not found!")
+    print("❌ Error: even_distribution_ft_data.csv not found!")
     print("Please run the data generation script first.")
     exit()
 
-# Create color mapping for load types - more vibrant colors
-color_map = {'Normal': 'darkblue', 'Strong': 'red'}
+# Calculate combined magnitude for color mapping
+df['Combined_Magnitude'] = np.sqrt(df['Force_Magnitude']**2 + (df['Torque_Magnitude']*10)**2)
 
-print("🔄 Creating visualizations...")
+# Define strength-based color palette
+strength_colors = [
+    "#000046",  # Dark blue (weakest)
+    "#2E008C",  # Purple blue
+    "#B70395",  # Magenta
+    "#EE5E05",  # Orange
+    "#FEC201",  # Yellow
+    "#FFF5A0"   # Light yellow (strongest)
+]
 
-# Create subplots with multiple rows and columns
+print("🎨 Creating strength-based color mapping...")
+
+# Create subplots
 fig = make_subplots(
-    rows=4, cols=3,
+    rows=3, cols=3,
     subplot_titles=[
-        'Force Magnitude Distribution', 'Torque Magnitude Distribution', 'Combined Load Distribution',
-        'Fx Distribution', 'Fy Distribution', 'Fz Distribution', 
-        'Mx Distribution', 'My Distribution', 'Mz Distribution',
-        '3D Force Plot', 'Force vs Torque Scatter', 'Load Type Distribution'
+        'Force Magnitude Distribution', 'Torque Magnitude Distribution', 'Fx Distribution',
+        'Fy Distribution', 'Fz Distribution', 'Mx Distribution', 
+        'My Distribution', 'Mz Distribution', '3D Force Plot'
     ],
     specs=[
-        [{"type": "histogram"}, {"type": "histogram"}, {"type": "histogram"}],
-        [{"type": "histogram"}, {"type": "histogram"}, {"type": "histogram"}],
-        [{"type": "histogram"}, {"type": "histogram"}, {"type": "histogram"}],
-        [{"type": "scatter3d"}, {"type": "scatter"}, {"type": "bar"}]
+        [{"type": "scatter"}, {"type": "scatter"}, {"type": "scatter"}],
+        [{"type": "scatter"}, {"type": "scatter"}, {"type": "scatter"}],
+        [{"type": "scatter"}, {"type": "scatter"}, {"type": "scatter3d"}]
     ],
-    vertical_spacing=0.08,
+    vertical_spacing=0.12,
     horizontal_spacing=0.08
 )
 
-# 1. Force Magnitude Distribution
-for load_type in ['Normal', 'Strong']:
-    data_subset = df[df['Load_Type'] == load_type]
-    fig.add_trace(
-        go.Histogram(
-            x=data_subset['Force_Magnitude'],
-            name=f'{load_type} Forces',
+# Create colorscale for plotly
+plotly_colorscale = [[i/(len(strength_colors)-1), color] for i, color in enumerate(strength_colors)]
+
+# 1. Force Magnitude Distribution with strength colors
+fig.add_trace(
+    go.Scatter(
+        x=df['Force_Magnitude'],
+        y=np.random.normal(0, 0.1, len(df)),
+        mode='markers',
+        marker=dict(
+            color=df['Force_Magnitude'],
+            colorscale=plotly_colorscale,
+            size=4,
             opacity=0.7,
-            marker_color=color_map[load_type],
-            showlegend=True
+            colorbar=dict(title="Force Magnitude (N)", x=0.15, len=0.3)
         ),
-        row=1, col=1
-    )
+        name='Force Magnitude',
+        showlegend=False
+    ),
+    row=1, col=1
+)
 
-# 2. Torque Magnitude Distribution
-for load_type in ['Normal', 'Strong']:
-    data_subset = df[df['Load_Type'] == load_type]
-    fig.add_trace(
-        go.Histogram(
-            x=data_subset['Torque_Magnitude'],
-            name=f'{load_type} Torques',
+# 2. Torque Magnitude Distribution with strength colors
+fig.add_trace(
+    go.Scatter(
+        x=df['Torque_Magnitude'],
+        y=np.random.normal(0, 0.1, len(df)),
+        mode='markers',
+        marker=dict(
+            color=df['Torque_Magnitude'],
+            colorscale=plotly_colorscale,
+            size=4,
             opacity=0.7,
-            marker_color=color_map[load_type],
-            showlegend=False
+            colorbar=dict(title="Torque Magnitude (Nm)", x=0.48, len=0.3)
         ),
-        row=1, col=2
-    )
+        name='Torque Magnitude',
+        showlegend=False
+    ),
+    row=1, col=2
+)
 
-# 3. Combined Load Distribution
-for load_type in ['Normal', 'Strong']:
-    data_subset = df[df['Load_Type'] == load_type]
-    fig.add_trace(
-        go.Histogram(
-            x=data_subset['Combined_Load_Fraction'],
-            name=f'{load_type} Combined',
-            opacity=0.7,
-            marker_color=color_map[load_type],
-            showlegend=False
-        ),
-        row=1, col=3
-    )
+# 3-8. Individual Axis Distributions with strength colors
+axes_info = [
+    ('Fx', 1, 3), ('Fy', 2, 1), ('Fz', 2, 2), 
+    ('Mx', 2, 3), ('My', 3, 1), ('Mz', 3, 2)
+]
 
-# 4-6. Individual Force Components
-force_axes = ['Fx', 'Fy', 'Fz']
-for i, axis in enumerate(force_axes):
-    for load_type in ['Normal', 'Strong']:
-        data_subset = df[df['Load_Type'] == load_type]
-        fig.add_trace(
-            go.Histogram(
-                x=data_subset[axis],
-                name=f'{load_type} {axis}',
-                opacity=0.7,
-                marker_color=color_map[load_type],
-                showlegend=False
-            ),
-            row=2, col=i+1
-        )
-
-# 7-9. Individual Torque Components
-torque_axes = ['Mx', 'My', 'Mz']
-for i, axis in enumerate(torque_axes):
-    for load_type in ['Normal', 'Strong']:
-        data_subset = df[df['Load_Type'] == load_type]
-        fig.add_trace(
-            go.Histogram(
-                x=data_subset[axis],
-                name=f'{load_type} {axis}',
-                opacity=0.7,
-                marker_color=color_map[load_type],
-                showlegend=False
-            ),
-            row=3, col=i+1
-        )
-
-# 10. 3D Force Plot
-for load_type in ['Normal', 'Strong']:
-    data_subset = df[df['Load_Type'] == load_type]
-    fig.add_trace(
-        go.Scatter3d(
-            x=data_subset['Fx'],
-            y=data_subset['Fy'],
-            z=data_subset['Fz'],
-            mode='markers',
-            marker=dict(
-                size=3,
-                color=color_map[load_type],
-                opacity=0.6
-            ),
-            name=f'{load_type} 3D Forces',
-            showlegend=False
-        ),
-        row=4, col=1
-    )
-
-# 11. Force vs Torque Scatter
-for load_type in ['Normal', 'Strong']:
-    data_subset = df[df['Load_Type'] == load_type]
+for axis, row, col in axes_info:
     fig.add_trace(
         go.Scatter(
-            x=data_subset['Force_Magnitude'],
-            y=data_subset['Torque_Magnitude'],
+            x=df[axis],
+            y=np.random.normal(0, 0.1, len(df)),
             mode='markers',
             marker=dict(
-                size=4,
-                color=color_map[load_type],
+                color=abs(df[axis]),
+                colorscale=plotly_colorscale,
+                size=3,
                 opacity=0.6
             ),
-            name=f'{load_type} F vs T',
+            name=f'{axis} Distribution',
             showlegend=False
         ),
-        row=4, col=2
+        row=row, col=col
     )
 
-# 12. Load Type Distribution (Bar Chart)
-load_counts = df['Load_Type'].value_counts()
+# 9. 3D Force Plot with combined strength colors
 fig.add_trace(
-    go.Bar(
-        x=load_counts.index,
-        y=load_counts.values,
-        marker_color=[color_map[load_type] for load_type in load_counts.index],
-        showlegend=False,
-        text=load_counts.values,
-        textposition='auto'
+    go.Scatter3d(
+        x=df['Fx'],
+        y=df['Fy'],
+        z=df['Fz'],
+        mode='markers',
+        marker=dict(
+            size=3,
+            color=df['Combined_Magnitude'],
+            colorscale=plotly_colorscale,
+            opacity=0.8,
+            colorbar=dict(title="Combined Magnitude", x=0.85, len=0.5)
+        ),
+        name='3D Forces',
+        showlegend=False
     ),
-    row=4, col=3
+    row=3, col=3
 )
 
 # Update layout
 fig.update_layout(
-    height=1200,
+    height=1000,
     width=1400,
-    title_text="FT Sensor Data Analysis Dashboard",
+    title_text="FT Sensor Even Distribution Analysis (Strength-Colored)",
     title_x=0.5,
-    showlegend=True,
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    )
+    showlegend=False
 )
 
 # Update x-axis labels
 fig.update_xaxes(title_text="Force Magnitude (N)", row=1, col=1)
 fig.update_xaxes(title_text="Torque Magnitude (Nm)", row=1, col=2)
-fig.update_xaxes(title_text="Combined Load Fraction", row=1, col=3)
-fig.update_xaxes(title_text="Fx (N)", row=2, col=1)
-fig.update_xaxes(title_text="Fy (N)", row=2, col=2)
-fig.update_xaxes(title_text="Fz (N)", row=2, col=3)
-fig.update_xaxes(title_text="Mx (Nm)", row=3, col=1)
-fig.update_xaxes(title_text="My (Nm)", row=3, col=2)
-fig.update_xaxes(title_text="Mz (Nm)", row=3, col=3)
-fig.update_xaxes(title_text="Force Magnitude (N)", row=4, col=2)
-fig.update_xaxes(title_text="Load Type", row=4, col=3)
+fig.update_xaxes(title_text="Fx (N)", row=1, col=3)
+fig.update_xaxes(title_text="Fy (N)", row=2, col=1)
+fig.update_xaxes(title_text="Fz (N)", row=2, col=2)
+fig.update_xaxes(title_text="Mx (Nm)", row=2, col=3)
+fig.update_xaxes(title_text="My (Nm)", row=3, col=1)
+fig.update_xaxes(title_text="Mz (Nm)", row=3, col=2)
 
 # Update y-axis labels
-fig.update_yaxes(title_text="Count", row=1, col=1)
-fig.update_yaxes(title_text="Count", row=1, col=2)
-fig.update_yaxes(title_text="Count", row=1, col=3)
-fig.update_yaxes(title_text="Count", row=2, col=1)
-fig.update_yaxes(title_text="Count", row=2, col=2)
-fig.update_yaxes(title_text="Count", row=2, col=3)
-fig.update_yaxes(title_text="Count", row=3, col=1)
-fig.update_yaxes(title_text="Count", row=3, col=2)
-fig.update_yaxes(title_text="Count", row=3, col=3)
-fig.update_yaxes(title_text="Torque Magnitude (Nm)", row=4, col=2)
-fig.update_yaxes(title_text="Count", row=4, col=3)
+fig.update_yaxes(title_text="Distribution", row=1, col=1)
+fig.update_yaxes(title_text="Distribution", row=1, col=2)
+fig.update_yaxes(title_text="Distribution", row=1, col=3)
+fig.update_yaxes(title_text="Distribution", row=2, col=1)
+fig.update_yaxes(title_text="Distribution", row=2, col=2)
+fig.update_yaxes(title_text="Distribution", row=2, col=3)
+fig.update_yaxes(title_text="Distribution", row=3, col=1)
+fig.update_yaxes(title_text="Distribution", row=3, col=2)
 
 # Update 3D scene
 fig.update_scenes(
     xaxis_title="Fx (N)",
     yaxis_title="Fy (N)",
     zaxis_title="Fz (N)",
-    row=4, col=1
+    row=3, col=3
 )
 
-# Save as HTML file (don't show in terminal)
-filename = "ft_sensor_analysis.html"
+# Save as HTML file
+filename = "strength_colored_ft_analysis.html"
 fig.write_html(filename)
 print(f"✅ Visualization saved as '{filename}'")
 print("📂 Open this file in your web browser to view the interactive plots!")
 
 # Print summary statistics
-print("\n" + "="*50)
-print("📊 SUMMARY STATISTICS")
-print("="*50)
+print("\n" + "="*60)
+print("📊 STRENGTH-COLORED ANALYSIS")
+print("="*60)
 print(f"📈 Total data points: {len(df)}")
-print(f"🟦 Normal loads: {len(df[df['Load_Type'] == 'Normal'])} ({len(df[df['Load_Type'] == 'Normal'])/len(df)*100:.1f}%)")
-print(f"🟥 Strong loads: {len(df[df['Load_Type'] == 'Strong'])} ({len(df[df['Load_Type'] == 'Strong'])/len(df)*100:.1f}%)")
 
-print(f"\n💪 FORCE STATISTICS:")
-print(f"   Range: {df['Force_Magnitude'].min():.1f} - {df['Force_Magnitude'].max():.1f} N")
-print(f"   Average: {df['Force_Magnitude'].mean():.1f} N")
+print(f"\n🎨 STRENGTH-BASED COLOR MAPPING:")
+print("   Dark blue (#000046) = Weakest forces/torques")
+print("   Purple blue (#2E008C) = Low strength") 
+print("   Magenta (#B70395) = Medium-low strength")
+print("   Orange (#EE5E05) = Medium-high strength")
+print("   Yellow (#FEC201) = High strength")
+print("   Light yellow (#FFF5A0) = Strongest forces/torques")
+
+print(f"\n💪 STRENGTH STATISTICS:")
+print(f"   Combined magnitude range: {df['Combined_Magnitude'].min():.1f} - {df['Combined_Magnitude'].max():.1f}")
+print(f"   Force magnitude range: {df['Force_Magnitude'].min():.1f} - {df['Force_Magnitude'].max():.1f} N")
+print(f"   Average force magnitude: {df['Force_Magnitude'].mean():.1f} N")
+print(f"   Standard deviation: {df['Force_Magnitude'].std():.1f} N")
 
 print(f"\n🔄 TORQUE STATISTICS:")
-print(f"   Range: {df['Torque_Magnitude'].min():.1f} - {df['Torque_Magnitude'].max():.1f} Nm")
-print(f"   Average: {df['Torque_Magnitude'].mean():.1f} Nm")
+print(f"   Torque magnitude range: {df['Torque_Magnitude'].min():.1f} - {df['Torque_Magnitude'].max():.1f} Nm")
+print(f"   Average torque magnitude: {df['Torque_Magnitude'].mean():.1f} Nm")
+print(f"   Standard deviation: {df['Torque_Magnitude'].std():.1f} Nm")
 
-print(f"\n⚖️  COMBINED LOAD STATISTICS:")
-print(f"   Range: {df['Combined_Load_Fraction'].min():.3f} - {df['Combined_Load_Fraction'].max():.3f}")
-print(f"   Average: {df['Combined_Load_Fraction'].mean():.3f}")
-
-print(f"\n📐 INDIVIDUAL AXIS RANGES:")
+print(f"\n📐 INDIVIDUAL AXIS STATISTICS:")
 for axis in ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz']:
     unit = 'N' if axis.startswith('F') else 'Nm'
-    print(f"   {axis}: {df[axis].min():.1f} to {df[axis].max():.1f} {unit}")
+    axis_data = df[axis]
+    print(f"   {axis}: {axis_data.min():.1f} to {axis_data.max():.1f} {unit} (std: {axis_data.std():.1f})")
+
+# Distribution evenness check
+print(f"\n🎯 DISTRIBUTION EVENNESS CHECK:")
+print("   (Lower standard deviation = more even distribution)")
+for axis in ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz']:
+    axis_data = df[axis]
+    hist, bins = np.histogram(axis_data, bins=20)
+    hist_std = np.std(hist)
+    hist_mean = np.mean(hist)
+    evenness_ratio = hist_std / hist_mean if hist_mean > 0 else 0
+    
+    status = "✅ Even" if evenness_ratio < 0.3 else "⚠️  Uneven" if evenness_ratio < 0.6 else "❌ Very uneven"
+    print(f"   {axis}: {status} (evenness ratio: {evenness_ratio:.2f})")
 
 print(f"\n🎯 Next steps:")
 print(f"   1. Open '{filename}' in your web browser")
-print(f"   2. Explore the interactive plots")
-print(f"   3. Verify the distributions look realistic")
-print(f"   4. Use 'realistic_ft_sensor_data.csv' for FEM simulation")
+print(f"   2. Check the beautiful strength-based color gradients")
+print(f"   3. Dark blue = weak, Light yellow = strong forces")
+print(f"   4. Use 'even_distribution_ft_data.csv' for FEM simulation")
+print(f"   5. All {len(df)} data points are ready!")
