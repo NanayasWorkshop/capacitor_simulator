@@ -1,6 +1,7 @@
 """
-Data Loader for Capacitor Simulator
-Handles loading and preprocessing of CSV displacement data and OBJ model files
+Data Loader for Capacitor Simulator - Modified Version
+A2, B2, C2 are now the stationary reference frames
+A1, B1, C1 are the moving sensors that get transformations applied
 """
 
 import numpy as np
@@ -95,21 +96,69 @@ class TransformationCalculator:
         
         return transform
     
-    def calculate_relative_transformation(self, points_a1: np.ndarray, points_a2: np.ndarray) -> np.ndarray:
-        """Calculate transformation from A1 coordinate system to A2"""
-        # Calculate centers and normals
-        center_a1, normal_a1 = self._calculate_center_and_normal(points_a1)
-        center_a2, normal_a2 = self._calculate_center_and_normal(points_a2)
+    def _transform_points(self, transformation_matrix: np.ndarray, points: np.ndarray) -> np.ndarray:
+        """Transform a list of 3D points using a 4x4 matrix"""
+        points = np.array(points)
         
-        # Create transformation matrices
-        transform_a1 = self._create_transformation_matrix(center_a1, normal_a1)
-        transform_a2 = self._create_transformation_matrix(center_a2, normal_a2)
+        # Convert to homogeneous coordinates
+        if points.shape[1] == 3:
+            ones = np.ones((points.shape[0], 1))
+            homogeneous_points = np.hstack([points, ones])
+        else:
+            homogeneous_points = points
         
-        # Relative transformation: A1^-1 * A2
-        transform_a1_inv = np.linalg.inv(transform_a1)
-        relative_transform = np.dot(transform_a2, transform_a1_inv)
+        # Apply transformation
+        transformed_homogeneous = np.dot(transformation_matrix, homogeneous_points.T).T
         
-        return relative_transform
+        # Convert back to 3D coordinates
+        transformed_points = transformed_homogeneous[:, :3]
+        
+        return transformed_points
+    
+    def calculate_relative_transformation(self, points_reference: np.ndarray, points_moving: np.ndarray) -> np.ndarray:
+        """
+        Calculate transformation from reference frame to moving sensor's position
+        
+        FLIPPED APPROACH:
+        - points_reference: The stationary sensor (A2, B2, or C2)
+        - points_moving: The moving sensor (A1, B1, or C1)
+        
+        1. Make the reference sensor (A2/B2/C2) the stationary frame
+        2. Calculate where the moving sensor (A1/B1/C1) is positioned relative to reference
+        3. Return transformation matrix to apply to the moving sensor's mesh
+        
+        Args:
+            points_reference: 3x3 array of reference sensor's triangle vertices (A2/B2/C2)
+            points_moving: 3x3 array of moving sensor's triangle vertices (A1/B1/C1)
+            
+        Returns:
+            4x4 transformation matrix to apply to moving sensor mesh
+        """
+        
+        # Step 1: Calculate reference sensor's center and normal (this becomes our stationary frame)
+        center_ref, normal_ref = self._calculate_center_and_normal(points_reference)
+        
+        # Step 2: Create transformation matrix: Reference → World
+        # This aligns reference center with origin and reference normal with Z-axis
+        T_ref_to_world = self._create_transformation_matrix(center_ref, normal_ref)
+        
+        # Step 3: Invert to get World → Reference frame
+        # This is the "look through reference sensor's eyes" transformation
+        T_world_to_ref = np.linalg.inv(T_ref_to_world)
+        
+        # Step 4: Transform moving sensor's points into reference frame
+        # Now moving sensor is expressed relative to reference sensor's coordinate system
+        moving_in_ref_frame = self._transform_points(T_world_to_ref, points_moving)
+        
+        # Step 5: Calculate moving sensor's center and normal in reference frame
+        # This tells us where moving sensor is positioned relative to reference (which is now at origin)
+        center_moving_in_ref, normal_moving_in_ref = self._calculate_center_and_normal(moving_in_ref_frame)
+        
+        # Step 6: Create transformation from reference origin to moving sensor's position
+        # This represents: "Start at reference (origin), move to where moving sensor is"
+        T_ref_to_moving_position = self._create_transformation_matrix(center_moving_in_ref, normal_moving_in_ref)
+        
+        return T_ref_to_moving_position
 
 class CSVDataLoader:
     """Load and process CSV displacement data from Ansys"""
@@ -404,14 +453,14 @@ class DataLoader:
         transformations = {}
         
         for sensor_group in ['A', 'B', 'C']:
-            sensor1_name = f"{sensor_group}1"
-            sensor2_name = f"{sensor_group}2"
+            reference_sensor = f"{sensor_group}2"  # A2, B2, C2 are now reference (stationary)
+            moving_sensor = f"{sensor_group}1"    # A1, B1, C1 are now moving
             
-            if sensor1_name in csv_data and sensor2_name in csv_data:
-                logger.info(f"Processing sensor pair {sensor_group}")
+            if reference_sensor in csv_data and moving_sensor in csv_data:
+                logger.info(f"Processing sensor pair {sensor_group} (reference: {reference_sensor}, moving: {moving_sensor})")
                 transforms = self._calculate_sensor_transformations(
-                    csv_data[sensor1_name], 
-                    csv_data[sensor2_name],
+                    csv_data[reference_sensor],  # Reference sensor (stationary)
+                    csv_data[moving_sensor],     # Moving sensor 
                     sensor_group
                 )
                 transformations[sensor_group] = transforms
@@ -428,31 +477,38 @@ class DataLoader:
         logger.info("Data loading completed successfully")
         return result
     
-    def _calculate_sensor_transformations(self, df1: pd.DataFrame, df2: pd.DataFrame, sensor_group: str) -> np.ndarray:
-        """Calculate transformation matrices for a sensor pair"""
+    def _calculate_sensor_transformations(self, df_reference: pd.DataFrame, df_moving: pd.DataFrame, sensor_group: str) -> np.ndarray:
+        """
+        Calculate transformation matrices for a sensor pair
+        
+        Args:
+            df_reference: DataFrame for reference sensor (A2, B2, or C2)
+            df_moving: DataFrame for moving sensor (A1, B1, or C1)
+            sensor_group: Sensor group identifier ('A', 'B', or 'C')
+        """
         # Get node names
-        nodes1 = self.csv_loader.get_column_names(df1)
-        nodes2 = self.csv_loader.get_column_names(df2)
+        nodes_reference = self.csv_loader.get_column_names(df_reference)
+        nodes_moving = self.csv_loader.get_column_names(df_moving)
         
         # Ensure same number of rows
-        min_rows = min(len(df1), len(df2))
+        min_rows = min(len(df_reference), len(df_moving))
         
         transformations = []
         
         for i in range(min_rows):
             # Extract displacements
-            displacements1 = self.csv_loader.extract_displacements(df1, i, nodes1)
-            displacements2 = self.csv_loader.extract_displacements(df2, i, nodes2)
+            displacements_reference = self.csv_loader.extract_displacements(df_reference, i, nodes_reference)
+            displacements_moving = self.csv_loader.extract_displacements(df_moving, i, nodes_moving)
             
             # Calculate actual positions
-            actual1 = self.transform_calc.reference_triangle + displacements1
-            actual2 = self.transform_calc.reference_triangle + displacements2
+            actual_reference = self.transform_calc.reference_triangle + displacements_reference
+            actual_moving = self.transform_calc.reference_triangle + displacements_moving
             
-            # Calculate relative transformation
-            rel_transform = self.transform_calc.calculate_relative_transformation(actual1, actual2)
+            # Calculate relative transformation: reference is stationary, moving gets the transformation
+            rel_transform = self.transform_calc.calculate_relative_transformation(actual_reference, actual_moving)
             transformations.append(rel_transform)
         
-        logger.info(f"Generated {len(transformations)} transformation matrices for sensor {sensor_group}")
+        logger.info(f"Generated {len(transformations)} transformation matrices for sensor {sensor_group} (reference: {sensor_group}2, moving: {sensor_group}1)")
         
         # Cache transformations if enabled
         if self.use_cache:

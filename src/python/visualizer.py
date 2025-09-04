@@ -2,6 +2,7 @@
 Capacitor Visualizer - Open3D dynamic 3D visualization
 Shows sensor movement with heat color arrows based on ray distance
 FIXED: Unicode encoding issue resolved for Windows compatibility
+Enhanced with amplified rotation (25x) and movement (10x) scaling
 """
 
 import numpy as np
@@ -30,7 +31,8 @@ class CapacitorVisualizer:
         self.fps = fps
         self.export_png = export_png
         self.export_video = export_video
-        self.movement_scale = 10.0  # 10 MILLION x scaling
+        self.movement_scale = 10.0  # 10x movement scaling
+        self.rotation_scale = 25.0  # 25x rotation scaling
         
         # Animation control
         self.current_step = 0
@@ -61,7 +63,7 @@ class CapacitorVisualizer:
         self.global_min_distance = float('inf')
         self.global_max_distance = 0.0
         
-        logger.info(f"CapacitorVisualizer initialized with {self.movement_scale}x movement scaling")
+        logger.info(f"CapacitorVisualizer initialized with {self.movement_scale}x movement and {self.rotation_scale}x rotation scaling")
     
     def _calculate_sensor_positions(self):
         """Calculate triangular positions for sensors A, B, C"""
@@ -252,6 +254,57 @@ class CapacitorVisualizer:
         
         return result
     
+    def _rotation_matrix_to_axis_angle(self, rotation_matrix):
+        """Convert rotation matrix to axis-angle representation"""
+        # Using Rodrigues' rotation formula (inverse)
+        trace = np.trace(rotation_matrix)
+        angle = np.arccos(np.clip((trace - 1) / 2, -1, 1))
+        
+        if np.abs(angle) < 1e-6:
+            return np.array([0.0, 0.0, 0.0])
+        
+        if np.abs(angle - np.pi) < 1e-6:
+            # Special case: 180-degree rotation
+            # Find the eigenvector corresponding to eigenvalue 1
+            eigenvals, eigenvecs = np.linalg.eig(rotation_matrix)
+            axis_idx = np.argmin(np.abs(eigenvals - 1))
+            axis = eigenvecs[:, axis_idx].real
+            axis = axis / np.linalg.norm(axis)
+            return axis * angle
+        
+        # General case
+        axis = np.array([
+            rotation_matrix[2, 1] - rotation_matrix[1, 2],
+            rotation_matrix[0, 2] - rotation_matrix[2, 0],
+            rotation_matrix[1, 0] - rotation_matrix[0, 1]
+        ]) / (2 * np.sin(angle))
+        
+        return axis * angle
+
+    def _axis_angle_to_rotation_matrix(self, axis_angle):
+        """Convert axis-angle representation to rotation matrix"""
+        angle = np.linalg.norm(axis_angle)
+        
+        if angle < 1e-8:
+            return np.eye(3)
+        
+        axis = axis_angle / angle
+        cos_angle = np.cos(angle)
+        sin_angle = np.sin(angle)
+        
+        # Rodrigues' rotation formula
+        K = np.array([
+            [0, -axis[2], axis[1]],
+            [axis[2], 0, -axis[0]],
+            [-axis[1], axis[0], 0]
+        ])
+        
+        rotation_matrix = (np.eye(3) + 
+                          sin_angle * K + 
+                          (1 - cos_angle) * np.dot(K, K))
+        
+        return rotation_matrix
+    
     def _create_mesh_from_data(self, model_name: str, color: List[float]):
         """Create Open3D mesh from model data"""
         if model_name not in self.data['model_data']:
@@ -271,7 +324,7 @@ class CapacitorVisualizer:
         return mesh
     
     def _apply_transformation(self, mesh: o3d.geometry.TriangleMesh, transformation: np.ndarray):
-        """Apply transformation with extreme scaling"""
+        """Apply transformation with amplified scaling for both translation AND rotation"""
         if mesh is None:
             return None
         
@@ -281,11 +334,32 @@ class CapacitorVisualizer:
         transformed_mesh.vertex_normals = mesh.vertex_normals
         transformed_mesh.vertex_colors = mesh.vertex_colors
         
-        # Apply extreme scaling to see movement
-        scaled_transformation = transformation.copy()
-        scaled_transformation[0:3, 3] *= self.movement_scale
+        # Create amplified transformation matrix
+        amplified_transformation = transformation.copy()
         
-        transformed_mesh.transform(scaled_transformation)
+        # Amplify translation (position movement) by movement_scale
+        amplified_transformation[0:3, 3] *= self.movement_scale
+        
+        # Amplify rotation by rotation_scale
+        rotation_matrix = transformation[0:3, 0:3]
+        
+        # Convert rotation matrix to axis-angle representation
+        rotation_vector = self._rotation_matrix_to_axis_angle(rotation_matrix)
+        
+        # Amplify the rotation angle (magnitude of the rotation vector)
+        rotation_magnitude = np.linalg.norm(rotation_vector)
+        if rotation_magnitude > 1e-8:  # Avoid division by zero
+            rotation_axis = rotation_vector / rotation_magnitude
+            amplified_angle = rotation_magnitude * self.rotation_scale
+            amplified_rotation_vector = rotation_axis * amplified_angle
+            
+            # Convert back to rotation matrix
+            amplified_rotation_matrix = self._axis_angle_to_rotation_matrix(amplified_rotation_vector)
+            
+            # Replace the rotation part in the transformation matrix
+            amplified_transformation[0:3, 0:3] = amplified_rotation_matrix
+        
+        transformed_mesh.transform(amplified_transformation)
         return transformed_mesh
     
     def _apply_sensor_offset(self, mesh: o3d.geometry.TriangleMesh, sensor_group: str):
@@ -426,7 +500,7 @@ class CapacitorVisualizer:
         render_option.line_width = 6.0  # THICK arrows
         render_option.mesh_show_back_face = True  # Both sides
         
-        logger.info(f"Setup complete. {self.max_steps} time steps with {self.movement_scale}x scaling")
+        logger.info(f"Setup complete. {self.max_steps} time steps with {self.movement_scale}x movement and {self.rotation_scale}x rotation scaling")
         logger.info(f"Heat range: {self.global_min_distance:.4f} - {self.global_max_distance:.4f} mm")
         # FIXED: Replaced Unicode arrows with ASCII-safe alternative
         logger.info("Heat colors: Dark Blue (short) -> Purple -> Magenta -> Orange -> Yellow -> Light Yellow (long)")
