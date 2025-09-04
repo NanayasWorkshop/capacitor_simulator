@@ -194,9 +194,9 @@ class CSVDataLoader:
         """Extract XYZ displacements for given row and nodes"""
         displacements = []
         for node in node_names:
-            x = df.iloc[row_index][f'{node}_X']
-            y = df.iloc[row_index][f'{node}_Y']
-            z = df.iloc[row_index][f'{node}_Z']
+            x = df.iloc[row_index][f'{node}_X'] * 1000.0  # Convert meters to mm
+            y = df.iloc[row_index][f'{node}_Y'] * 1000.0  # Convert meters to mm  
+            z = df.iloc[row_index][f'{node}_Z'] * 1000.0  # Convert meters to mm
             displacements.append([x, y, z])
         return np.array(displacements)
     

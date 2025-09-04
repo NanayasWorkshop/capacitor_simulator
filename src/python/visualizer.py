@@ -29,7 +29,7 @@ class CapacitorVisualizer:
         self.fps = fps
         self.export_png = export_png
         self.export_video = export_video
-        self.movement_scale = 1000.0  # 10 MILLION x scaling
+        self.movement_scale = 10.0  # 10 MILLION x scaling
         
         # Animation control
         self.current_step = 0
