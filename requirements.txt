@@ -1,0 +1,25 @@
+# Core scientific computing
+numpy>=1.21.0
+pandas>=1.5.0
+
+# 3D visualization and geometry
+open3d>=0.15.0
+trimesh>=3.15.0
+
+# C++ Python bindings
+pybind11>=2.10.0
+
+# Progress bars and CLI
+tqdm>=4.64.0
+
+# Path handling (built-in but explicit for clarity)
+pathlib2>=2.3.7; python_version<"3.4"
+
+# Optional: Configuration file support
+pyyaml>=6.0
+
+# Optional: Better performance for large arrays
+numba>=0.56.0
+
+# Development and debugging
+psutil>=5.8.0  # Memory monitoring
