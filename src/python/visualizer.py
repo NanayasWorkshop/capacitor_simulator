@@ -1,6 +1,7 @@
 """
 Capacitor Visualizer - Open3D dynamic 3D visualization
 Shows sensor movement with heat color arrows based on ray distance
+FIXED: Unicode encoding issue resolved for Windows compatibility
 """
 
 import numpy as np
@@ -427,7 +428,8 @@ class CapacitorVisualizer:
         
         logger.info(f"Setup complete. {self.max_steps} time steps with {self.movement_scale}x scaling")
         logger.info(f"Heat range: {self.global_min_distance:.4f} - {self.global_max_distance:.4f} mm")
-        logger.info("Heat colors: Dark Blue (short) → Purple → Magenta → Orange → Yellow → Light Yellow (long)")
+        # FIXED: Replaced Unicode arrows with ASCII-safe alternative
+        logger.info("Heat colors: Dark Blue (short) -> Purple -> Magenta -> Orange -> Yellow -> Light Yellow (long)")
     
     def _update_step(self, step: int):
         """Update visualization for specific time step"""
@@ -527,7 +529,8 @@ class CapacitorVisualizer:
     def show_interactive(self):
         """Show interactive visualization"""
         logger.info("Starting heat map visualization...")
-        logger.info("Heat Colors: Dark Blue (shortest) → Purple → Magenta → Orange → Yellow → Light Yellow (longest)")
+        # FIXED: Replaced Unicode arrows with ASCII-safe alternative
+        logger.info("Heat Colors: Dark Blue (shortest) -> Purple -> Magenta -> Orange -> Yellow -> Light Yellow (longest)")
         logger.info("Controls:")
         logger.info("  Spacebar: Play/Pause")
         logger.info("  Arrow keys: Step forward/backward")
